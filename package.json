@@ -1,0 +1,16 @@
+{
+  "name": "@coolio/claude-statusline",
+  "version": "1.0.0",
+  "description": "Single-line statusline for Claude Code with model, context, git, rate limits, and version update detection",
+  "bin": {
+    "claude-statusline": "./bin/install.js"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "statusline",
+    "cli"
+  ],
+  "license": "MIT",
+  "author": "coolio"
+}
