@@ -129,6 +129,7 @@ if (fs.existsSync(settingsPath)) {
 }
 
 settings.statusLine = {
+  type: "command",
   command: statuslineDest,
 };
 
