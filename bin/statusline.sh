@@ -67,6 +67,25 @@ iso_to_epoch() {
     return 1
 }
 
+format_reset_time() {
+    local iso_str="$1"
+    local style="$2"
+    [ -z "$iso_str" ] || [ "$iso_str" = "null" ] && return
+    local epoch
+    epoch=$(iso_to_epoch "$iso_str")
+    [ -z "$epoch" ] && return
+    case "$style" in
+        time)
+            date -j -r "$epoch" +"%l:%M%p" 2>/dev/null | sed 's/^ //; s/\.//g' | tr '[:upper:]' '[:lower:]' || \
+            date -d "@$epoch" +"%l:%M%P" 2>/dev/null | sed 's/^ //; s/\.//g'
+            ;;
+        date)
+            date -j -r "$epoch" +"%b %-d" 2>/dev/null | tr '[:upper:]' '[:lower:]' || \
+            date -d "@$epoch" +"%b %-d" 2>/dev/null | tr '[:upper:]' '[:lower:]'
+            ;;
+    esac
+}
+
 # ── Extract JSON data ─────────────────────────────────────
 model_name=$(echo "$input" | jq -r '.model.display_name // "Claude"')
 
@@ -250,11 +269,18 @@ rate_segment=""
 if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
     five_hour_pct=$(echo "$usage_data" | jq -r '.five_hour.utilization // 0' | awk '{printf "%.0f", $1}')
     five_pct_color=$(color_for_pct "$five_hour_pct")
+    five_reset_iso=$(echo "$usage_data" | jq -r '.five_hour.resets_at // empty')
+    five_reset=$(format_reset_time "$five_reset_iso" "time")
 
     seven_day_pct=$(echo "$usage_data" | jq -r '.seven_day.utilization // 0' | awk '{printf "%.0f", $1}')
     seven_pct_color=$(color_for_pct "$seven_day_pct")
+    seven_reset_iso=$(echo "$usage_data" | jq -r '.seven_day.resets_at // empty')
+    seven_reset=$(format_reset_time "$seven_reset_iso" "date")
 
-    rate_segment="${sep}${dim}5h:${reset}${five_pct_color}${five_hour_pct}%${reset}${dim} 7d:${reset}${seven_pct_color}${seven_day_pct}%${reset}"
+    rate_segment="${sep}${dim}5h:${reset}${five_pct_color}${five_hour_pct}%${reset}"
+    [ -n "$five_reset" ] && rate_segment+="${dim}⟳${white}${five_reset}${reset}"
+    rate_segment+="${dim} 7d:${reset}${seven_pct_color}${seven_day_pct}%${reset}"
+    [ -n "$seven_reset" ] && rate_segment+="${dim}⟳${white}${seven_reset}${reset}"
 fi
 
 # ── Assemble single line ──────────────────────────────────
