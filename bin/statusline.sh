@@ -117,10 +117,17 @@ if git -C "$cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 
 session_duration=""
-start_epoch=""
-session_start=$(echo "$input" | jq -r '.session.start_time // empty')
-if [ -n "$session_start" ] && [ "$session_start" != "null" ]; then
-    start_epoch=$(iso_to_epoch "$session_start")
+session_id=$(echo "$input" | jq -r '.session_id // empty')
+session_start_file="/tmp/claude/statusline-session-start"
+if [ -n "$session_id" ]; then
+    stored_session_id=""
+    if [ -f "$session_start_file" ]; then
+        stored_session_id=$(sed -n '2p' "$session_start_file" 2>/dev/null)
+    fi
+    if [ "$stored_session_id" != "$session_id" ]; then
+        printf '%s\n%s\n' "$(date +%s)" "$session_id" > "$session_start_file"
+    fi
+    start_epoch=$(sed -n '1p' "$session_start_file" 2>/dev/null)
     if [ -n "$start_epoch" ]; then
         now_epoch=$(date +%s)
         elapsed=$(( now_epoch - start_epoch ))
@@ -214,11 +221,11 @@ fi
 
 # ── Version update check (cached) ────────────────────────
 update_indicator=""
-session_ver_file="/tmp/claude/statusline-session-ver"
+running_ver=$(echo "$input" | jq -r '.version // empty')
 current_ver_file="/tmp/claude/statusline-current-ver"
 ver_cache_max_age=120
 
-# Get currently installed version (cached)
+# Get version installed on disk (cached)
 installed_ver=""
 needs_ver_check=true
 if [ -f "$current_ver_file" ]; then
@@ -237,28 +244,15 @@ if $needs_ver_check; then
     fi
 fi
 
-# Save session version on first run or new session
-regen_session_ver=false
-if [ ! -f "$session_ver_file" ]; then
-    regen_session_ver=true
-elif [ -n "$start_epoch" ]; then
-    sv_mtime=$(stat -c %Y "$session_ver_file" 2>/dev/null || stat -f %m "$session_ver_file" 2>/dev/null)
-    if [ -n "$sv_mtime" ] && [ "$sv_mtime" -lt "$start_epoch" ]; then
-        regen_session_ver=true
-    fi
-fi
-if $regen_session_ver && [ -n "$installed_ver" ]; then
-    echo "$installed_ver" > "$session_ver_file"
-fi
-
-# Compare: show version normally, or restart indicator if changed
-if [ -f "$session_ver_file" ] && [ -n "$installed_ver" ]; then
-    session_ver=$(cat "$session_ver_file" 2>/dev/null)
-    if [ "$session_ver" != "$installed_ver" ]; then
+# Compare running version vs installed: if installed is newer, show restart
+if [ -n "$running_ver" ] && [ -n "$installed_ver" ]; then
+    if [ "$running_ver" != "$installed_ver" ]; then
         update_indicator="${sep}${red}⟳ restart ${dim}(${installed_ver})${reset}"
     else
-        update_indicator="${sep}${dim}v${session_ver}${reset}"
+        update_indicator="${sep}${dim}v${running_ver}${reset}"
     fi
+elif [ -n "$running_ver" ]; then
+    update_indicator="${sep}${dim}v${running_ver}${reset}"
 elif [ -n "$installed_ver" ]; then
     update_indicator="${sep}${dim}v${installed_ver}${reset}"
 fi
